@@ -1,4 +1,5 @@
 \# BudiPulse 🇲🇾
+<img width="2454" height="1370" alt="image" src="https://github.com/user-attachments/assets/b754fa44-d6f3-435b-8768-525049b927d0" />
 
 
 
