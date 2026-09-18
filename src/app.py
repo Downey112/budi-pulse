@@ -310,13 +310,17 @@ else:
 # ==========================================
 st.markdown("---")
 st.subheader("💡 Personal Commute Burden Calculator")
-st.markdown("Calculate your monthly fuel exposure based on the BUDI MADANI 200-liter quota using live market rates.")
+st.markdown("Calculate your monthly fuel exposure based on the current BUDI MADANI quota using live market rates.")
 
 calc_col1, calc_col2 = st.columns([1, 2], gap="large")
 
 with calc_col1:
     st.markdown("##### 🚗 Your Commute Details")
     calc_fuel = st.selectbox("Vehicle Fuel Type", ["RON95", "Diesel"])
+    
+    # New checkbox for expanded 400L eligibility
+    is_4wd = st.checkbox("Vehicle is a Pickup / 4WD (400L Quota Eligibility)")
+    
     calc_dist = st.number_input("Daily Round-Trip Distance (km)", min_value=1.0, value=40.0, step=5.0)
     calc_eff = st.number_input("Vehicle Efficiency (km/L)", min_value=1.0, value=14.0, help="Perodua Myvi averages ~14 km/L. SUVs average ~10 km/L.")
     calc_days = st.slider("Driving Days per Month", 1, 31, 22)
@@ -336,8 +340,10 @@ with calc_col2:
         
     subsidized_price = market_price - subsidy_gap
     
-    # 3. Math: Quota Logic (200L limit)
-    quota = 200.0
+    # 3. Math: Quota Logic (Updated Sept 2026)
+    # Base quota is 300L, expands to 400L for pickups/4WDs
+    quota = 400.0 if is_4wd else 300.0 
+    
     liters_subsidized = min(monthly_liters, quota)
     liters_market = max(0.0, monthly_liters - quota)
     
@@ -363,7 +369,7 @@ with calc_col2:
     r3.metric("Effective Monthly Cost", f"RM {total_monthly_cost:.2f}")
     
     # Dynamic insight message
-    st.success(f"**Government Subsidy Absorbed:** RM {gov_absorbed:.2f} saved this month due to the BUDI MADANI quota.")
+    st.success(f"**Government Subsidy Absorbed:** RM {gov_absorbed:.2f} saved this month due to the BUDI MADANI {int(quota)}L quota.")
 # ==========================================
 # 9. Curated Data Table (Clean Governance)
 # ==========================================
