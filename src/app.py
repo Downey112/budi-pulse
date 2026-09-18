@@ -305,7 +305,65 @@ if not plot_df.empty:
     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 else:
     st.info("Insufficient longitudinal data to plot subsidy gap trends for this timeframe.")
+# ==========================================
+# 8.5 Interactive Calculator: Personal Impact
+# ==========================================
+st.markdown("---")
+st.subheader("💡 Personal Commute Burden Calculator")
+st.markdown("Calculate your monthly fuel exposure based on the BUDI MADANI 200-liter quota using live market rates.")
 
+calc_col1, calc_col2 = st.columns([1, 2], gap="large")
+
+with calc_col1:
+    st.markdown("##### 🚗 Your Commute Details")
+    calc_fuel = st.selectbox("Vehicle Fuel Type", ["RON95", "Diesel"])
+    calc_dist = st.number_input("Daily Round-Trip Distance (km)", min_value=1.0, value=40.0, step=5.0)
+    calc_eff = st.number_input("Vehicle Efficiency (km/L)", min_value=1.0, value=14.0, help="Perodua Myvi averages ~14 km/L. SUVs average ~10 km/L.")
+    calc_days = st.slider("Driving Days per Month", 1, 31, 22)
+
+with calc_col2:
+    # 1. Math: Distance & Liters
+    monthly_km = calc_dist * calc_days
+    monthly_liters = monthly_km / calc_eff
+    
+    # 2. Math: Extract Live Prices from Database
+    if calc_fuel == "RON95":
+        market_price = latest['ron95_market']
+        subsidy_gap = latest['ron95_gap']
+    else:
+        market_price = latest['diesel_market']
+        subsidy_gap = latest['diesel_gap']
+        
+    subsidized_price = market_price - subsidy_gap
+    
+    # 3. Math: Quota Logic (200L limit)
+    quota = 200.0
+    liters_subsidized = min(monthly_liters, quota)
+    liters_market = max(0.0, monthly_liters - quota)
+    
+    # 4. Math: Financial Impact
+    cost_subsidized = liters_subsidized * subsidized_price
+    cost_market = liters_market * market_price
+    total_monthly_cost = cost_subsidized + cost_market
+    
+    cost_no_subsidy = monthly_liters * market_price
+    gov_absorbed = cost_no_subsidy - total_monthly_cost
+    
+    # Render Output UI
+    st.markdown("##### 🧾 Monthly Financial Impact")
+    
+    r1, r2, r3 = st.columns(3)
+    r1.metric("Total Fuel Required", f"{monthly_liters:.1f} L")
+    
+    if liters_market > 0:
+        r2.metric("Exposed to Market Price", f"{liters_market:.1f} L", delta="Over Quota Limit", delta_color="inverse")
+    else:
+        r2.metric("Exposed to Market Price", f"0.0 L", delta="Within Safe Quota", delta_color="normal")
+        
+    r3.metric("Effective Monthly Cost", f"RM {total_monthly_cost:.2f}")
+    
+    # Dynamic insight message
+    st.success(f"**Government Subsidy Absorbed:** RM {gov_absorbed:.2f} saved this month due to the BUDI MADANI quota.")
 # ==========================================
 # 9. Curated Data Table (Clean Governance)
 # ==========================================
