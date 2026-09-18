@@ -1,7 +1,7 @@
 name: BudiPulse ETL Pipeline
 
 on:
-schedule:
+  schedule:
     # Runs at 00:00 UTC every Sunday and Wednesday
     - cron: '0 0 * * 0,3'
   workflow_dispatch: # Allows you to click a "Run workflow" button manually
@@ -30,3 +30,6 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python src/db.py
+        
+      - name: Ping Streamlit Dashboard to prevent sleep
+        run: curl -sSf https://budi-pulse.streamlit.app > /dev/null
