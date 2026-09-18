@@ -32,7 +32,7 @@ def load_data() -> pd.DataFrame:
     return df.sort_values(by="date", ascending=True).reset_index(drop=True)
 
 # 4. App Layout & Sidebar
-st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/2/28/Flag_of_Malaysia.svg", width=100)
+st.sidebar.image("https://flagcdn.com/w160/my.png", width=100)
 st.sidebar.title("BudiPulse Filters")
 st.sidebar.markdown("Filter the subsidy gap data by timeframe.")
 
