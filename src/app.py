@@ -61,27 +61,39 @@ elif timeframe == "Last 3 Months":
 st.title("BudiPulse 🇲🇾")
 st.markdown("### Tracking Malaysia's Fuel Subsidy Rationalization & Fiscal Gaps")
 st.markdown("Automated data pipeline tracking the spread between market float prices and BUDI MADANI retail caps.")
-st.write("") # Spacer
+st.write("") 
 
-# 5. KPI Metrics Row (Styled)
+# 5. KPI Metrics Row (True Week-over-Week Deltas)
 latest = df.iloc[-1]
+prev = df.iloc[-2] if len(df) > 1 else latest
+
 latest_date = latest['date'].strftime('%d %B %Y')
+
+# Calculate weekly differences
+ron95_delta = latest['ron95_gap'] - prev['ron95_gap']
+diesel_delta = latest['diesel_gap'] - prev['diesel_gap']
 
 st.markdown(f"**Latest Data Update:** `{latest_date}`")
 
-# Use containers to give metrics breathing room
 col1, col2, col3, col4 = st.columns(4)
 with col1:
     st.metric("RON95 Market", f"RM {latest['ron95_market']:.2f}")
 with col2:
-    st.metric("RON95 Subsidy Gap", f"RM {latest['ron95_gap']:.2f}", delta=f"RM {latest['ron95_gap']:.2f}", delta_color="inverse")
+    st.metric(
+        "RON95 Subsidy Gap", 
+        f"RM {latest['ron95_gap']:.2f}", 
+        delta=f"RM {ron95_delta:+.2f} vs last wk", 
+        delta_color="inverse"
+    )
 with col3:
     st.metric("Diesel Market", f"RM {latest['diesel_market']:.2f}")
 with col4:
-    st.metric("Diesel Subsidy Gap", f"RM {latest['diesel_gap']:.2f}", delta=f"RM {latest['diesel_gap']:.2f}", delta_color="inverse")
-
-st.divider()
-
+    st.metric(
+        "Diesel Subsidy Gap", 
+        f"RM {latest['diesel_gap']:.2f}", 
+        delta=f"RM {diesel_delta:+.2f} vs last wk", 
+        delta_color="inverse"
+    )
 # 6. Premium Interactive Visualization
 st.subheader("Subsidy Gap Trends Over Time")
 
