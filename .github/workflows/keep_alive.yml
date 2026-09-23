@@ -1,0 +1,15 @@
+name: Wake Up Budi Pulse
+
+on:
+  schedule:
+    # Runs every 12 hours. You can adjust the cron schedule if needed.
+    - cron: '0 */12 * * *'
+  workflow_dispatch: # Allows you to trigger it manually from GitHub anytime
+
+jobs:
+  ping-app:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send HTTP request to Streamlit
+        run: |
+          curl -I https://budi-pulse.streamlit.app/
