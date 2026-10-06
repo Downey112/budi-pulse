@@ -110,12 +110,17 @@ st.markdown("""
 # ==========================================
 # 4. Data Ingestion & Transformation
 # ==========================================
+PRICE_COLS = ["ron95_market", "ron95_gap", "diesel_market", "diesel_gap"]
+
 @st.cache_data(ttl=3600)
 def load_data() -> pd.DataFrame:
     response = supabase.table("fuel_subsidy_records").select("*").execute()
     df = pd.DataFrame(response.data)
     if df.empty: return df
     df["date"] = pd.to_datetime(df["date"])
+    # NULLs from Postgres arrive as None; coerce so the price columns are always float (NaN)
+    for col in PRICE_COLS:
+        df[col] = pd.to_numeric(df[col], errors="coerce") if col in df.columns else float("nan")
     # Sort chronologically for charting
     return df.sort_values(by="date", ascending=True).reset_index(drop=True)
 
@@ -130,7 +135,11 @@ st.sidebar.markdown("Data Governance & Subsidy Tracker")
 st.sidebar.write("") 
 
 with st.spinner("Initializing system connection..."):
-    df = load_data()
+    try:
+        df = load_data()
+    except Exception as err:
+        st.error(f"Could not load data from Supabase. Check SUPABASE_URL and that the project is active.\n\n`{type(err).__name__}: {err}`")
+        st.stop()
 
 if df.empty:
     st.warning("No data found in the production schema.")
@@ -161,7 +170,7 @@ st.sidebar.markdown(
     unsafe_allow_html=True
 )
 st.sidebar.markdown(
-    "<span style='color: #666; font-size: 12px;'>Automated Update:</span> <span style='color: #FAFAFA;'>Weekly (Wed 00:00 UTC)</span>", 
+    "<span style='color: #666; font-size: 12px;'>Automated Update:</span> <span style='color: #FAFAFA;'>Sun &amp; Wed 00:00 UTC</span>", 
     unsafe_allow_html=True
 )
 
@@ -186,12 +195,16 @@ st.write("") # Vertical spacer before metrics
 # 7. Prepremier Metric Cards Row (Visual Engagement)
 # ==========================================
 # Instead of standard st.metric, we define custom HTML/CSS to make glowing, icon-driven cards.
-latest = df.iloc[-1]
 # We MUST use the UNFILTERED data to find the true previous week
-# Locate the actual position of the latest week in the full dataframe
-latest_idx = df.index[-1]
+# Only weeks with complete pricing can drive the cards and calculator
+priced_df = df.dropna(subset=PRICE_COLS)
+if priced_df.empty:
+    st.warning("No complete pricing records (market price + subsidy gap) are available yet.")
+    st.stop()
+
+latest = priced_df.iloc[-1]
 # If we have at least 2 weeks of history, get the previous week
-prev = df.iloc[latest_idx - 1] if latest_idx >= 1 else latest
+prev = priced_df.iloc[-2] if len(priced_df) >= 2 else latest
 
 latest_date = latest['date'].strftime('%d %B %Y')
 
@@ -302,7 +315,7 @@ if not plot_df.empty:
     fig.for_each_trace(lambda t: t.update(name = newnames[t.name]))
     
     # Draw chart with the default Plotly toolbar REMOVED to keep it clean
-    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+    st.plotly_chart(fig, width="stretch", config={'displayModeBar': False})
 else:
     st.info("Insufficient longitudinal data to plot subsidy gap trends for this timeframe.")
 # ==========================================
@@ -393,7 +406,7 @@ styled_table = governance_df.style\
 with st.expander("🔍 View Validated Raw Schema Records", expanded=False):
     st.dataframe(
         styled_table, 
-        use_container_width=True, 
+        width="stretch",
         hide_index=True
     )
     st.markdown("<span style='color: #555; font-size: 12px;'>Data Source: Calculated from validated OpenDOSM endpoints. Duplicate checking enforced via .upsert() primary key governance.</span>", unsafe_allow_html=True)
