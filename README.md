@@ -13,7 +13,7 @@ An automated, end-to-end data engineering pipeline and interactive dashboard tra
 ## 📖 Project Overview
 BudiPulse bridges the gap between macroeconomic government datasets and personal financial impact. It automatically tracks the weekly spread between market float prices and BUDI MADANI retail caps (RON95 and Diesel), visualizing the fiscal burden absorbed by the Malaysian government. 
 
-The dashboard features a **Personal Commute Burden Calculator**, allowing end-users to input their daily mileage and vehicle efficiency to dynamically calculate their monthly fuel cost exposure against the 200-liter subsidized quota.
+The dashboard features a **Personal Commute Burden Calculator**, allowing end-users to input their daily mileage and vehicle efficiency to dynamically calculate their monthly fuel cost exposure against the 300-liter subsidized quota (400 liters for pickups / 4WDs).
 
 ## 🏗️ Architecture & Tech Stack
 This project utilizes a modern cloud data stack with a fully automated, zero-cost infrastructure:
