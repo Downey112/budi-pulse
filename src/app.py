@@ -268,7 +268,8 @@ st.write("") # Vertical spacer before chart
 st.markdown("---")
 st.subheader("Subsidy Gap Trends Over Time")
 
-plot_df = filtered_df.dropna(subset=['ron95_gap', 'diesel_gap'])
+# Keep any week with at least one gap; each line simply starts where its data does
+plot_df = filtered_df.dropna(subset=['ron95_gap', 'diesel_gap'], how="all")
 
 if not plot_df.empty:
     # Use Plotly Express for industry standard interactive charts
