@@ -212,13 +212,19 @@ st.markdown(f"📊 **Market Pricing Status:** As of `{latest_date}` (Week-over-W
 st.write("") # Vertical spacer
 
 # Calculate weekly differences (Deltas)
-ron95_delta_gap = latest['ron95_gap'] - prev['ron95_gap']
-diesel_delta_gap = latest['diesel_gap'] - prev['diesel_gap']
+# Rounded to sen so float noise doesn't register as a price move
+ron95_delta_gap = round(latest['ron95_gap'] - prev['ron95_gap'], 2)
+diesel_delta_gap = round(latest['diesel_gap'] - prev['diesel_gap'], 2)
+
+def delta_style(delta):
+    """Red/up when the gap widens, green/down when it narrows, grey when flat."""
+    if delta > 0: return "color: #ff4b4b;", "↑"
+    if delta < 0: return "color: #2ecc71;", "↓"
+    return "color: #888;", "→"
 
 # Define HTML for the two key metrics (RON95 and Diesel Gaps)
 # Metric 1: RON95 Gap
-ron95_delta_class = "color: #ff4b4b;" if ron95_delta_gap > 0 else "color: #2ecc71;"
-ron95_arrow = "↑" if ron95_delta_gap > 0 else "↓"
+ron95_delta_class, ron95_arrow = delta_style(ron95_delta_gap)
 
 metric_card_ron95 = f"""
     <div class="metric-card">
@@ -233,8 +239,7 @@ metric_card_ron95 = f"""
 """
 
 # Metric 2: Diesel Gap
-diesel_delta_class = "color: #ff4b4b;" if diesel_delta_gap > 0 else "color: #2ecc71;"
-diesel_arrow = "↑" if diesel_delta_gap > 0 else "↓"
+diesel_delta_class, diesel_arrow = delta_style(diesel_delta_gap)
 
 metric_card_diesel = f"""
     <div class="metric-card">
