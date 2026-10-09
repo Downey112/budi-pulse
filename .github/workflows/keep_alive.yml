@@ -2,14 +2,28 @@ name: Wake Up Budi Pulse
 
 on:
   schedule:
-    # Runs every 12 hours. You can adjust the cron schedule if needed.
-    - cron: '0 */12 * * *'
+    # Runs every 6 hours. You can adjust the cron schedule if needed.
+    - cron: '0 */6 * * *'
   workflow_dispatch: # Allows you to trigger it manually from GitHub anytime
 
 jobs:
   ping-app:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - name: Send HTTP request to Streamlit
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install headless browser
         run: |
-          curl -I https://budi-pulse.streamlit.app/
+          python -m pip install --upgrade pip
+          pip install playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Open the Streamlit app in a browser
+        run: python .github/scripts/wake_app.py

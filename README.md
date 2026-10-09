@@ -25,7 +25,7 @@ This project utilizes a modern cloud data stack with a fully automated, zero-cos
 * **Frontend (Visualization):** Streamlit Community Cloud & Plotly. Features custom CSS for glowing metric cards, responsive layout spacing, and a unified dark theme.
 
 ### Infrastructure Health-Check
-To prevent the Streamlit application from entering its default 7-day hibernation state, the GitHub Actions ETL pipeline is configured with a final step that executes an automated `curl` ping against the live URL. This guarantees 100% frontend uptime and instant load speeds for stakeholders.
+To keep the Streamlit application from hibernating after a period without visitors, a separate GitHub Actions workflow (`keep_alive.yml`) opens the live URL in a headless browser every 6 hours and clicks the wake button if the app has gone to sleep. A plain `curl` ping is not enough, because it only receives a redirect and never starts the app.
 
 ---
 
@@ -35,14 +35,14 @@ To run the pipeline and dashboard on your local machine:
 
 **1. Clone the repository**
 ```bash
-git clone [https://github.com/downey112/budi-pulse.git](https://github.com/downey112/budi-pulse.git)
+git clone https://github.com/downey112/budi-pulse.git
 cd budi-pulse
 ```
 
 **2. Set up the virtual environment & install dependencies**
 ```bash
-python -m venv .venv
-source .venv/Scripts/activate  # On Windows Git Bash
+python -m venv venv
+source venv/Scripts/activate  # On Windows Git Bash
 pip install -r requirements.txt
 ```
 
@@ -51,7 +51,9 @@ Create a `.env` file in the root directory and add your Supabase credentials:
 ```toml
 SUPABASE_URL="your_supabase_project_url"
 SUPABASE_SERVICE_ROLE_KEY="your_supabase_master_key"
+SUPABASE_ANON_KEY="your_supabase_anon_key"
 ```
+The ETL pipeline writes with the service role key. The dashboard only reads, so it uses `SUPABASE_ANON_KEY` when set (this needs a read policy on `fuel_subsidy_records`) and falls back to the service role key otherwise.
 
 **4. Run the ETL Pipeline manually**
 ```bash

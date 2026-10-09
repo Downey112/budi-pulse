@@ -12,7 +12,7 @@
 - Run ETL pipeline: `python src/db.py` — this upserts into the production Supabase table, so confirm before running it.
 - Tests: there is no `tests/` directory and `pytest` is not installed. Smoke-test the dashboard headlessly with `streamlit.testing.v1.AppTest` against `src/app.py`.
 - Check syntax: `python -m py_compile src/*.py`
-- Credentials: `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are read from `.env` in the repo root (never commit it).
+- Credentials: `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are read from `.env` in the repo root (never commit it). The dashboard prefers `SUPABASE_ANON_KEY` when it is set.
 
 ## Repository Structure & Rules
 - Core application code lives in `src/`: `ingest.py` (fetch + transform), `db.py` (upsert to Supabase), `app.py` (Streamlit dashboard).

@@ -19,7 +19,9 @@ load_dotenv()
 @st.cache_resource
 def init_connection() -> Client:
     url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+    # The dashboard only reads, so prefer the read-only anon key.
+    # Falls back to the service role key until SUPABASE_ANON_KEY is configured.
+    key = os.environ.get("SUPABASE_ANON_KEY") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
     if not url or not key:
         st.error("Missing Supabase credentials. Check your .env file.")
         st.stop()
