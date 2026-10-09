@@ -30,6 +30,3 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python src/db.py
-        
-      - name: Ping Streamlit Dashboard to prevent sleep
-        run: curl -sSf https://budi-pulse.streamlit.app > /dev/null
