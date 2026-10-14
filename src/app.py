@@ -554,7 +554,7 @@ if not plot_df.empty:
         hovertemplate="RM %{y:.2f}/L<extra></extra>",
     )
     fig.update_layout(
-        height=340,
+        height=370,
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
         xaxis_title="",
@@ -575,13 +575,14 @@ if not plot_df.empty:
             bordercolor="#2E3346",
             font=dict(family="JetBrains Mono, monospace", size=12, color="#F3F4F6"),
         ),
-        margin=dict(l=0, r=8, t=24, b=0),
+        margin=dict(l=0, r=32, t=48, b=8),
     )
     fig.update_xaxes(
         showgrid=False,
         linecolor="#1E212D",
         tickformat="%b %Y",
         tickfont=dict(color="#6B7280", size=11),
+        automargin=True,
     )
     fig.update_yaxes(
         showgrid=True,
