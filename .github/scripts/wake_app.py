@@ -1,8 +1,4 @@
-"""Open the Streamlit app in a real browser so Community Cloud counts it as a visit.
-
-A plain HTTP request only receives a redirect and never starts the app, so it
-does not reset the inactivity timer or wake a sleeping app.
-"""
+"""Open the Streamlit app in a real browser so Community Cloud counts it as a visit."""
 import os
 import sys
 import time
@@ -15,7 +11,6 @@ TIMEOUT_SECONDS = 300
 
 
 def app_is_running(page) -> bool:
-    # The app is served inside an iframe, so check every frame
     for frame in page.frames:
         try:
             if frame.locator('[data-testid="stApp"]').count() > 0:
@@ -27,16 +22,22 @@ def app_is_running(page) -> bool:
 
 def main() -> int:
     with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
+        browser = p.chromium.launch(
+            args=["--disable-gpu", "--disable-dev-shm-usage", "--no-sandbox"]
+        )
+        context = browser.new_context()
+        page = context.new_page()
+        page.route(
+            "**/*.{png,jpg,jpeg,gif,webp,svg,woff,woff2,ttf}",
+            lambda route: route.abort(),
+        )
         page.goto(APP_URL, wait_until="domcontentloaded", timeout=60_000)
 
         woke = False
         deadline = time.time() + TIMEOUT_SECONDS
         while time.time() < deadline:
             if app_is_running(page):
-                # Stay connected briefly so the session registers as traffic
-                page.wait_for_timeout(10_000)
+                page.wait_for_timeout(8_000)
                 print(f"[SUCCESS] App is running{' (woken from sleep)' if woke else ''}.")
                 browser.close()
                 return 0
@@ -47,7 +48,7 @@ def main() -> int:
                 button.first.click()
                 woke = True
 
-            page.wait_for_timeout(5_000)
+            page.wait_for_timeout(4_000)
 
         print(f"[ERROR] App did not come up within {TIMEOUT_SECONDS}s. Final URL: {page.url}")
         browser.close()
