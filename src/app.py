@@ -1,420 +1,737 @@
 import os
+from typing import Dict, Tuple
 import pandas as pd
-import streamlit as st
 import plotly.express as px
+import streamlit as st
 from dotenv import load_dotenv
-from supabase import create_client, Client
-from datetime import datetime
+from supabase import Client, create_client
 
-# ==========================================
-# 1. Page Configuration
-# ==========================================
-st.set_page_config(page_title="BudiPulse • Malaysia", page_icon="🇲🇾", layout="wide")
+st.set_page_config(
+    page_title="BudiPulse",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
 load_dotenv()
 
-# ==========================================
-# 2. Database Connection (STAYS THE SAME)
-# ==========================================
+PRICE_COLS = ["ron95_market", "ron95_gap", "diesel_market", "diesel_gap"]
+ALL_NUMERIC_COLS = [
+    "ron95_market",
+    "ron95_budi",
+    "ron95_gap",
+    "diesel_market",
+    "diesel_budi",
+    "diesel_gap",
+]
+
+
 @st.cache_resource
 def init_connection() -> Client:
     url = os.environ.get("SUPABASE_URL")
-    # The dashboard only reads, so prefer the read-only anon key.
-    # Falls back to the service role key until SUPABASE_ANON_KEY is configured.
     key = os.environ.get("SUPABASE_ANON_KEY") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
     if not url or not key:
         st.error("Missing Supabase credentials. Check your .env file.")
         st.stop()
     return create_client(url, key)
 
+
 supabase = init_connection()
 
-# ==========================================
-# 3. Custom CSS - The Industry Polish
-# ==========================================
-# We use custom CSS to force premium card designs, fonts, and round borders.
-st.markdown("""
+st.markdown(
+    """
 <style>
-    /* Remove redundant padding at top */
-    .block-container { padding-top: 1.5rem !important; }
-    
-    /* Global Font Tweak */
-    html, body, [class*="css"]  {
-        font-family: 'Inter', sans-serif;
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+    :root {
+        --bg-base: #090A0F;
+        --bg-surface: #11131A;
+        --bg-elevated: #161922;
+        --border-subtle: #1E212D;
+        --border-hover: #2E3346;
+        --text-primary: #F3F4F6;
+        --text-secondary: #9CA3AF;
+        --text-muted: #6B7280;
+        --accent-ron95: #E5A000;
+        --accent-diesel: #38BDF8;
+        --delta-up: #EF4444;
+        --delta-down: #10B981;
+        --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
     }
 
-    /* Target the sidebar directly to prevent content shifting */
+    html, body, [class*="css"] {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        color: var(--text-primary);
+        -webkit-font-smoothing: antialiased;
+    }
+
+    .block-container {
+        padding-top: 2rem !important;
+        padding-bottom: 3rem !important;
+        max-width: 1180px !important;
+    }
+
     [data-testid="stSidebar"] {
-        padding-top: 0px !important;
+        background-color: #0C0E14 !important;
+        border-right: 1px solid var(--border-subtle) !important;
     }
 
-    /* PREMIER METRIC CARDS - CSS styling */
-    .metric-card {
-        background-color: #262730;
-        border-radius: 12px;
-        padding: 24px;
-        position: relative;
-        border: 1px solid #333;
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
-        overflow: hidden;
+    @keyframes bp-fade-up {
+        from {
+            opacity: 0;
+            transform: translateY(6px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
     }
-    .metric-card:hover {
-        transform: translateY(-3px);
-        box-shadow: 0px 4px 20px rgba(0, 0, 0, 0.4);
-        border-color: #F5B041;
+
+    @keyframes bp-pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.35; }
     }
-    .metric-label {
-        font-size: 14px;
-        text-transform: uppercase;
-        letter-spacing: 1.2px;
-        color: #888;
+
+    .bp-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        flex-wrap: wrap;
+        gap: 12px;
+        padding-bottom: 20px;
+        margin-bottom: 24px;
+        border-bottom: 1px solid var(--border-subtle);
+        animation: bp-fade-up 200ms var(--ease-out) both;
+    }
+
+    .bp-title {
+        font-size: 24px;
+        font-weight: 600;
+        letter-spacing: -0.025em;
+        color: var(--text-primary);
+        margin: 0 0 4px 0;
+        line-height: 1.2;
+    }
+
+    .bp-subtitle {
+        font-size: 13.5px;
+        color: var(--text-secondary);
+        margin: 0;
+        font-weight: 400;
+    }
+
+    .bp-meta-pill {
+        font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+        font-size: 12px;
+        color: var(--text-secondary);
+        background: var(--bg-surface);
+        border: 1px solid var(--border-subtle);
+        border-radius: 6px;
+        padding: 6px 10px;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .bp-card {
+        background: var(--bg-surface);
+        border: 1px solid var(--border-subtle);
+        border-radius: 8px;
+        padding: 20px 22px;
+        transition: border-color 160ms var(--ease-out), background-color 160ms var(--ease-out);
+        animation: bp-fade-up 240ms var(--ease-out) both;
+    }
+
+    .bp-card:hover {
+        border-color: var(--border-hover);
+        background: var(--bg-elevated);
+    }
+
+    .bp-card-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+
+    .bp-label {
+        font-size: 11.5px;
         font-weight: 500;
-        margin-bottom: 8px;
-    }
-    .metric-value {
-        font-size: 38px;
-        font-weight: 800;
-        color: #FAFAFA;
-        line-height: 1.1;
-    }
-    .metric-delta {
-        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--text-secondary);
         display: flex;
         align-items: center;
-        gap: 4px;
-        margin-top: 8px;
-    }
-    .metric-icon {
-        position: absolute;
-        bottom: -20px;
-        right: -10px;
-        font-size: 100px;
-        color: rgba(255, 255, 255, 0.03);
-    }
-    .glow-overlay {
-        position: absolute;
-        top: 0; left: 0; right: 0; bottom: 0;
-        background: radial-gradient(circle at top left, rgba(245, 176, 65, 0.05), transparent 60%);
+        gap: 8px;
     }
 
-    /* Header Styling */
-    h1 { font-weight: 800 !important; color: #FAFAFA !important; }
-    h2 { font-weight: 700 !important; margin-top: 2rem !important; }
-    
-    /* Cleaner Table Styling */
+    .bp-swatch {
+        width: 8px;
+        height: 8px;
+        border-radius: 2px;
+        display: inline-block;
+    }
+
+    .bp-delta {
+        font-family: 'JetBrains Mono', ui-monospace, monospace;
+        font-size: 12px;
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+        padding: 2px 7px;
+        border-radius: 4px;
+        background: rgba(255, 255, 255, 0.03);
+    }
+
+    .bp-value {
+        font-family: 'JetBrains Mono', ui-monospace, monospace;
+        font-size: 30px;
+        font-weight: 600;
+        letter-spacing: -0.03em;
+        color: var(--text-primary);
+        line-height: 1.15;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .bp-unit {
+        font-size: 14px;
+        font-weight: 400;
+        color: var(--text-muted);
+    }
+
+    .bp-card-foot {
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border-subtle);
+        display: flex;
+        justify-content: space-between;
+        font-size: 12px;
+        color: var(--text-muted);
+        font-family: 'JetBrains Mono', ui-monospace, monospace;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .bp-section {
+        margin-top: 32px;
+        margin-bottom: 12px;
+        animation: bp-fade-up 260ms var(--ease-out) both;
+    }
+
+    .bp-section-title {
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        color: var(--text-primary);
+        margin: 0 0 2px 0;
+    }
+
+    .bp-section-desc {
+        font-size: 13px;
+        color: var(--text-muted);
+        margin: 0;
+    }
+
+    .bp-calc-panel {
+        background: var(--bg-surface);
+        border: 1px solid var(--border-subtle);
+        border-radius: 8px;
+        padding: 22px;
+        height: 100%;
+        transition: border-color 160ms var(--ease-out);
+    }
+
+    .bp-calc-panel:hover {
+        border-color: var(--border-hover);
+    }
+
+    .bp-progress-header {
+        display: flex;
+        justify-content: space-between;
+        font-size: 12px;
+        margin-bottom: 8px;
+        color: var(--text-secondary);
+        font-family: 'JetBrains Mono', ui-monospace, monospace;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .bp-progress-track {
+        width: 100%;
+        height: 6px;
+        background: #1C1F2B;
+        border-radius: 3px;
+        overflow: hidden;
+        margin-bottom: 20px;
+    }
+
+    .bp-progress-fill {
+        height: 100%;
+        border-radius: 3px;
+        transition: width 240ms var(--ease-out), background-color 200ms ease;
+    }
+
+    .bp-calc-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 14px;
+    }
+
+    .bp-stat-box {
+        background: #0D0F15;
+        border: 1px solid var(--border-subtle);
+        border-radius: 6px;
+        padding: 14px 16px;
+    }
+
+    .bp-stat-label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text-muted);
+        margin-bottom: 6px;
+    }
+
+    .bp-stat-val {
+        font-family: 'JetBrains Mono', ui-monospace, monospace;
+        font-size: 20px;
+        font-weight: 600;
+        color: var(--text-primary);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .bp-stat-sub {
+        font-size: 11.5px;
+        color: var(--text-secondary);
+        margin-top: 4px;
+        font-family: 'JetBrains Mono', ui-monospace, monospace;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .bp-status-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--text-secondary);
+        margin-bottom: 6px;
+    }
+
+    .bp-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background-color: var(--delta-down);
+        animation: bp-pulse 3s ease-in-out infinite;
+    }
+
     [data-testid="stDataFrame"] {
-        border: 1px solid #333 !important;
-        border-radius: 12px;
+        border: 1px solid var(--border-subtle) !important;
+        border-radius: 8px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+        }
     }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
-# ==========================================
-# 4. Data Ingestion & Transformation
-# ==========================================
-PRICE_COLS = ["ron95_market", "ron95_gap", "diesel_market", "diesel_gap"]
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600, show_spinner=False)
 def load_data() -> pd.DataFrame:
     response = supabase.table("fuel_subsidy_records").select("*").execute()
     df = pd.DataFrame(response.data)
-    if df.empty: return df
-    df["date"] = pd.to_datetime(df["date"])
-    # NULLs from Postgres arrive as None; coerce so the price columns are always float (NaN)
-    for col in PRICE_COLS:
-        df[col] = pd.to_numeric(df[col], errors="coerce") if col in df.columns else float("nan")
-    # Sort chronologically for charting
-    return df.sort_values(by="date", ascending=True).reset_index(drop=True)
+    if df.empty:
+        return df
 
-# ==========================================
-# 5. App Layout & Sidebar (Updated)
-# ==========================================
-st.sidebar.markdown("<br>", unsafe_allow_html=True)
-# Updated Flag source that won't be blocked
-st.sidebar.image("https://flagcdn.com/w160/my.png", width=90)
-st.sidebar.title("BudiPulse")
-st.sidebar.markdown("Data Governance & Subsidy Tracker")
-st.sidebar.write("") 
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    df = df.dropna(subset=["date"])
 
-with st.spinner("Initializing system connection..."):
-    try:
-        df = load_data()
-    except Exception as err:
-        st.error(f"Could not load data from Supabase. Check SUPABASE_URL and that the project is active.\n\n`{type(err).__name__}: {err}`")
-        st.stop()
+    for col in ALL_NUMERIC_COLS:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+        else:
+            df[col] = float("nan")
+
+    return df.sort_values(by="date", ascending=True, ignore_index=True)
+
+
+def delta_style(delta: float) -> Tuple[str, str]:
+    if delta > 0:
+        return "color: #EF4444;", "+"
+    if delta < 0:
+        return "color: #10B981;", "-"
+    return "color: #6B7280;", ""
+
+
+def compute_commute_impact(
+    dist_km: float,
+    eff_kml: float,
+    days: int,
+    market_price: float,
+    subsidy_gap: float,
+    is_4wd: bool,
+) -> Dict[str, float]:
+    monthly_km = dist_km * days
+    monthly_liters = monthly_km / max(eff_kml, 0.1)
+    subsidized_price = max(0.0, market_price - subsidy_gap)
+    quota = 400.0 if is_4wd else 300.0
+
+    liters_subsidized = min(monthly_liters, quota)
+    liters_market = max(0.0, monthly_liters - quota)
+
+    cost_subsidized = liters_subsidized * subsidized_price
+    cost_market = liters_market * market_price
+    total_monthly_cost = cost_subsidized + cost_market
+    cost_no_subsidy = monthly_liters * market_price
+    gov_absorbed = max(0.0, cost_no_subsidy - total_monthly_cost)
+    utilization_pct = (monthly_liters / quota) * 100.0
+
+    return {
+        "monthly_km": monthly_km,
+        "monthly_liters": monthly_liters,
+        "subsidized_price": subsidized_price,
+        "market_price": market_price,
+        "quota": quota,
+        "liters_subsidized": liters_subsidized,
+        "liters_market": liters_market,
+        "cost_market": cost_market,
+        "total_monthly_cost": total_monthly_cost,
+        "gov_absorbed": gov_absorbed,
+        "utilization_pct": utilization_pct,
+    }
+
+
+try:
+    df = load_data()
+except Exception as err:
+    st.error(
+        f"Could not load data from Supabase. Verify SUPABASE_URL and project status.\n\n`{type(err).__name__}: {err}`"
+    )
+    st.stop()
 
 if df.empty:
     st.warning("No data found in the production schema.")
     st.stop()
 
-# Date Filter Widget
-st.sidebar.subheader("Timeframe Analysis")
-timeframe = st.sidebar.radio(
-    "Select analysis range:",
-    ["All Time", "Last 6 Months", "Last 3 Months"],
-    index=1
+st.sidebar.markdown(
+    """
+    <div style="padding: 8px 0 16px 0; border-bottom: 1px solid #1E212D; margin-bottom: 16px;">
+        <div style="font-size: 16px; font-weight: 600; color: #F3F4F6; letter-spacing: -0.02em;">BudiPulse</div>
+        <div style="font-size: 12px; color: #6B7280; margin-top: 2px;">Malaysia Fuel Subsidy Telemetry</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
 )
 
-# Apply Filter logic
+timeframe = st.sidebar.radio(
+    "Timeframe",
+    ["All Time", "Last 6 Months", "Last 3 Months"],
+    index=1,
+)
+
+max_date = df["date"].max()
 if timeframe == "Last 6 Months":
-    cutoff = datetime.now() - pd.DateOffset(months=6)
-    filtered_df = df[df["date"] >= cutoff]
+    cutoff = max_date - pd.DateOffset(months=6)
+    filtered_df = df.loc[df["date"] >= cutoff]
 elif timeframe == "Last 3 Months":
-    cutoff = datetime.now() - pd.DateOffset(months=3)
-    filtered_df = df[df["date"] >= cutoff]
+    cutoff = max_date - pd.DateOffset(months=3)
+    filtered_df = df.loc[df["date"] >= cutoff]
 else:
     filtered_df = df
 
-st.sidebar.write("")
-st.sidebar.divider()
 st.sidebar.markdown(
-    "<span style='color: #666; font-size: 12px;'>Pipeline Status:</span> <span style='color: #2ECC71; font-weight:700;'>LIVE</span>", 
-    unsafe_allow_html=True
+    """
+    <div style="margin-top: 28px; padding-top: 16px; border-top: 1px solid #1E212D;">
+        <div class="bp-status-row">
+            <span class="bp-dot"></span>
+            <span>Pipeline active</span>
+        </div>
+        <div style="font-size: 11.5px; color: #6B7280; font-family: 'JetBrains Mono', monospace;">
+            Sync: Sun &amp; Wed 00:00 UTC
+        </div>
+        <div style="font-size: 11.5px; color: #6B7280; margin-top: 4px;">
+            Source: OpenDOSM fuelprice.csv
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
 )
-st.sidebar.markdown(
-    "<span style='color: #666; font-size: 12px;'>Automated Update:</span> <span style='color: #FAFAFA;'>Sun &amp; Wed 00:00 UTC</span>", 
-    unsafe_allow_html=True
-)
 
-# ==========================================
-# 6. Main Dashboard Area
-# ==========================================
-
-# Use wide columns to structure the page better
-left_co, right_co = st.columns([6, 1], gap="medium")
-with left_co:
-    # Adding a badge effect to the title
-    st.markdown("""
-        <h1>BudiPulse <span style='color: #F5B041; font-size: 20px; font-weight: 400; vertical-align: middle; margin-left:10px; border: 1px solid #333; padding: 4px 12px; border-radius: 50px; background-color: #262730;'>PRODUCTION LIVE</span></h1>
-    """, unsafe_allow_html=True)
-    st.markdown("Automated Data Pipeline Tracking Malaysia's Fuel Subsidy Rationalization (BUDI MADANI Fiscal Gaps)")
-with right_co:
-    st.write("") # Spacer to push the flag up
-
-st.write("") # Vertical spacer before metrics
-
-# ==========================================
-# 7. Prepremier Metric Cards Row (Visual Engagement)
-# ==========================================
-# Instead of standard st.metric, we define custom HTML/CSS to make glowing, icon-driven cards.
-# We MUST use the UNFILTERED data to find the true previous week
-# Only weeks with complete pricing can drive the cards and calculator
 priced_df = df.dropna(subset=PRICE_COLS)
 if priced_df.empty:
     st.warning("No complete pricing records (market price + subsidy gap) are available yet.")
     st.stop()
 
 latest = priced_df.iloc[-1]
-# If we have at least 2 weeks of history, get the previous week
 prev = priced_df.iloc[-2] if len(priced_df) >= 2 else latest
+latest_date = latest["date"].strftime("%d %b %Y")
 
-latest_date = latest['date'].strftime('%d %B %Y')
-
-st.markdown(f"📊 **Market Pricing Status:** As of `{latest_date}` (Week-over-Week volatility tracker)")
-st.write("") # Vertical spacer
-
-# Calculate weekly differences (Deltas)
-# Rounded to sen so float noise doesn't register as a price move
-ron95_delta_gap = round(latest['ron95_gap'] - prev['ron95_gap'], 2)
-diesel_delta_gap = round(latest['diesel_gap'] - prev['diesel_gap'], 2)
-
-def delta_style(delta):
-    """Red/up when the gap widens, green/down when it narrows, grey when flat."""
-    if delta > 0: return "color: #ff4b4b;", "↑"
-    if delta < 0: return "color: #2ecc71;", "↓"
-    return "color: #888;", "→"
-
-# Define HTML for the two key metrics (RON95 and Diesel Gaps)
-# Metric 1: RON95 Gap
-ron95_delta_class, ron95_arrow = delta_style(ron95_delta_gap)
-
-metric_card_ron95 = f"""
-    <div class="metric-card">
-        <div class="glow-overlay"></div>
-        <div class="metric-label">RON95 Subsidy Gap</div>
-        <div class="metric-value">RM {latest['ron95_gap']:.2f}</div>
-        <div class="metric-delta" style="{ron95_delta_class}">
-            {ron95_arrow} {abs(ron95_delta_gap):.2f} <span style="color: #666; margin-left:2px;">vs. last week</span>
+st.markdown(
+    f"""
+    <div class="bp-header">
+        <div>
+            <h1 class="bp-title">BudiPulse</h1>
+            <p class="bp-subtitle">Weekly spread between unsubsidized float prices and BUDI MADANI retail caps</p>
         </div>
-        <div class="metric-icon">⛽</div>
+        <div class="bp-meta-pill">Updated {latest_date}</div>
     </div>
-"""
+    """,
+    unsafe_allow_html=True,
+)
 
-# Metric 2: Diesel Gap
-diesel_delta_class, diesel_arrow = delta_style(diesel_delta_gap)
+ron95_delta_gap = round(float(latest["ron95_gap"] - prev["ron95_gap"]), 2)
+diesel_delta_gap = round(float(latest["diesel_gap"] - prev["diesel_gap"]), 2)
 
-metric_card_diesel = f"""
-    <div class="metric-card">
-        <div class="glow-overlay"></div>
-        <div class="metric-label">Diesel Subsidy Gap</div>
-        <div class="metric-value">RM {latest['diesel_gap']:.2f}</div>
-        <div class="metric-delta" style="{diesel_delta_class}">
-            {diesel_arrow} {abs(diesel_delta_gap):.2f} <span style="color: #666; margin-left:2px;">vs. last week</span>
+ron95_style, ron95_sign = delta_style(ron95_delta_gap)
+diesel_style, diesel_sign = delta_style(diesel_delta_gap)
+
+ron95_budi_val = float(latest["ron95_market"] - latest["ron95_gap"])
+diesel_budi_val = float(latest["diesel_market"] - latest["diesel_gap"])
+
+col_ron95, col_diesel = st.columns(2, gap="medium")
+
+with col_ron95:
+    st.markdown(
+        f"""
+        <div class="bp-card">
+            <div class="bp-card-top">
+                <span class="bp-label"><span class="bp-swatch" style="background:#E5A000;"></span>RON95 Subsidy Spread</span>
+                <span class="bp-delta" style="{ron95_style}">{ron95_sign}RM {abs(ron95_delta_gap):.2f} WoW</span>
+            </div>
+            <div class="bp-value">RM {latest['ron95_gap']:.2f} <span class="bp-unit">/ L</span></div>
+            <div class="bp-card-foot">
+                <span>Float: RM {latest['ron95_market']:.2f}/L</span>
+                <span>Cap: RM {ron95_budi_val:.2f}/L</span>
+            </div>
         </div>
-        <div class="metric-icon">🚚</div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+with col_diesel:
+    st.markdown(
+        f"""
+        <div class="bp-card">
+            <div class="bp-card-top">
+                <span class="bp-label"><span class="bp-swatch" style="background:#38BDF8;"></span>Diesel Subsidy Spread</span>
+                <span class="bp-delta" style="{diesel_style}">{diesel_sign}RM {abs(diesel_delta_gap):.2f} WoW</span>
+            </div>
+            <div class="bp-value">RM {latest['diesel_gap']:.2f} <span class="bp-unit">/ L</span></div>
+            <div class="bp-card-foot">
+                <span>Float: RM {latest['diesel_market']:.2f}/L</span>
+                <span>Cap: RM {diesel_budi_val:.2f}/L</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+st.markdown(
+    """
+    <div class="bp-section">
+        <h2 class="bp-section-title">Historical Spread</h2>
+        <p class="bp-section-desc">Per-liter fiscal gap absorbed between market float and subsidized retail price</p>
     </div>
-"""
+    """,
+    unsafe_allow_html=True,
+)
 
-# Render the cards using columns
-mCol1, mCol2 = st.columns(2, gap="large")
-with mCol1:
-    st.markdown(metric_card_ron95, unsafe_allow_html=True)
-with mCol2:
-    st.markdown(metric_card_diesel, unsafe_allow_html=True)
-
-st.write("") # Vertical spacer before chart
-
-# ==========================================
-# 8. Optimized Visualization (Industry Style)
-# ==========================================
-st.markdown("---")
-st.subheader("Subsidy Gap Trends Over Time")
-
-# Keep any week with at least one gap; each line simply starts where its data does
-plot_df = filtered_df.dropna(subset=['ron95_gap', 'diesel_gap'], how="all")
+plot_df = filtered_df.dropna(subset=["ron95_gap", "diesel_gap"], how="all")
 
 if not plot_df.empty:
-    # Use Plotly Express for industry standard interactive charts
     fig = px.line(
-        plot_df, 
-        x="date", 
+        plot_df,
+        x="date",
         y=["ron95_gap", "diesel_gap"],
         color_discrete_map={
-            "ron95_gap": "#F5B041", # Primary vibrant yellow-orange
-            "diesel_gap": "#3498DB"  # Contrasting clean blue
-        }
+            "ron95_gap": "#E5A000",
+            "diesel_gap": "#38BDF8",
+        },
     )
-    
-    # ADVANCED PLOTLY STYLING (The industry look)
+    fig.update_traces(
+        line=dict(width=2),
+        hovertemplate="RM %{y:.2f}/L<extra></extra>",
+    )
     fig.update_layout(
-        plot_bgcolor="rgba(0,0,0,0)", # Transparent background
-        paper_bgcolor="rgba(0,0,0,0)", # Transparent background
-        xaxis_title="", # Remove redundant X title (we know it's Date)
-        yaxis_title="Subsidy Gap (RM / Liter)",
+        height=340,
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        xaxis_title="",
+        yaxis_title="RM / Liter",
         legend_title_text="",
-        font=dict(family="Inter, sans-serif", color="#888"), # Unified font
-        # Horizontal legend placed elegantly at top-right
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        hovermode="x unified", # Single hover label across both lines
-        margin=dict(l=0, r=10, t=30, b=0) # Minimal padding
+        font=dict(family="Inter, sans-serif", size=12, color="#9CA3AF"),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1,
+            font=dict(size=12, color="#9CA3AF"),
+        ),
+        hovermode="x unified",
+        hoverlabel=dict(
+            bgcolor="#11131A",
+            bordercolor="#2E3346",
+            font=dict(family="JetBrains Mono, monospace", size=12, color="#F3F4F6"),
+        ),
+        margin=dict(l=0, r=8, t=24, b=0),
     )
-    
-    # Custom hover template polish
-    fig.update_traces(hovertemplate="RM %{y:.2f} <extra></extra>")
-    
-    # Fine-tune the axes gridlines for a clean look
     fig.update_xaxes(
-        showgrid=False, 
-        linecolor="#333", 
-        tickformat="%b %Y", # Example: 'Aug 2026'
-        tickfont=dict(color="#666")
+        showgrid=False,
+        linecolor="#1E212D",
+        tickformat="%b %Y",
+        tickfont=dict(color="#6B7280", size=11),
     )
     fig.update_yaxes(
-        showgrid=True, 
-        gridwidth=1, 
-        gridcolor="#333333", 
+        showgrid=True,
+        gridwidth=1,
+        gridcolor="#161922",
+        zeroline=False,
         linecolor="rgba(0,0,0,0)",
         tickprefix="RM ",
-        tickfont=dict(color="#666")
+        tickfont=dict(color="#6B7280", size=11),
     )
-    
-    # Clean up trace names to proper capitalized labels
-    newnames = {'ron95_gap': 'RON95 Gap', 'diesel_gap': 'Diesel Gap'}
-    fig.for_each_trace(lambda t: t.update(name = newnames[t.name]))
-    
-    # Draw chart with the default Plotly toolbar REMOVED to keep it clean
-    st.plotly_chart(fig, width="stretch", config={'displayModeBar': False})
+    trace_labels = {"ron95_gap": "RON95 Spread", "diesel_gap": "Diesel Spread"}
+    fig.for_each_trace(lambda t: t.update(name=trace_labels.get(t.name, t.name)))
+    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 else:
     st.info("Insufficient longitudinal data to plot subsidy gap trends for this timeframe.")
-# ==========================================
-# 8.5 Interactive Calculator: Personal Impact
-# ==========================================
-st.markdown("---")
-st.subheader("💡 Personal Commute Burden Calculator")
-st.markdown("Calculate your monthly fuel exposure based on the current BUDI MADANI quota using live market rates.")
 
-calc_col1, calc_col2 = st.columns([1, 2], gap="large")
+st.markdown(
+    """
+    <div class="bp-section">
+        <h2 class="bp-section-title">Commute Quota Calculator</h2>
+        <p class="bp-section-desc">Estimate monthly fuel expenditure against the 300 L standard quota (400 L for qualifying 4WD / pickups)</p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
-with calc_col1:
-    st.markdown("##### 🚗 Your Commute Details")
-    calc_fuel = st.selectbox("Vehicle Fuel Type", ["RON95", "Diesel"])
-    
-    # New checkbox for expanded 400L eligibility
-    is_4wd = st.checkbox("Vehicle is a Pickup / 4WD (400L Quota Eligibility)")
-    
-    calc_dist = st.number_input("Daily Round-Trip Distance (km)", min_value=1.0, value=40.0, step=5.0)
-    calc_eff = st.number_input("Vehicle Efficiency (km/L)", min_value=1.0, value=14.0, help="Perodua Myvi averages ~14 km/L. SUVs average ~10 km/L.")
-    calc_days = st.slider("Driving Days per Month", 1, 31, 22)
+_fragment_decorator = getattr(st, "fragment", lambda fn: fn)
 
-with calc_col2:
-    # 1. Math: Distance & Liters
-    monthly_km = calc_dist * calc_days
-    monthly_liters = monthly_km / calc_eff
-    
-    # 2. Math: Extract Live Prices from Database
-    if calc_fuel == "RON95":
-        market_price = latest['ron95_market']
-        subsidy_gap = latest['ron95_gap']
-    else:
-        market_price = latest['diesel_market']
-        subsidy_gap = latest['diesel_gap']
-        
-    subsidized_price = market_price - subsidy_gap
-    
-    # 3. Math: Quota Logic (Updated Sept 2026)
-    # Base quota is 300L, expands to 400L for pickups/4WDs
-    quota = 400.0 if is_4wd else 300.0 
-    
-    liters_subsidized = min(monthly_liters, quota)
-    liters_market = max(0.0, monthly_liters - quota)
-    
-    # 4. Math: Financial Impact
-    cost_subsidized = liters_subsidized * subsidized_price
-    cost_market = liters_market * market_price
-    total_monthly_cost = cost_subsidized + cost_market
-    
-    cost_no_subsidy = monthly_liters * market_price
-    gov_absorbed = cost_no_subsidy - total_monthly_cost
-    
-    # Render Output UI
-    st.markdown("##### 🧾 Monthly Financial Impact")
-    
-    r1, r2, r3 = st.columns(3)
-    r1.metric("Total Fuel Required", f"{monthly_liters:.1f} L")
-    
-    if liters_market > 0:
-        r2.metric("Exposed to Market Price", f"{liters_market:.1f} L", delta="Over Quota Limit", delta_color="inverse")
-    else:
-        r2.metric("Exposed to Market Price", f"0.0 L", delta="Within Safe Quota", delta_color="normal")
-        
-    r3.metric("Effective Monthly Cost", f"RM {total_monthly_cost:.2f}")
-    
-    # Dynamic insight message
-    st.success(f"**Government Subsidy Absorbed:** RM {gov_absorbed:.2f} saved this month due to the BUDI MADANI {int(quota)}L quota.")
-# ==========================================
-# 9. Curated Data Table (Clean Governance)
-# ==========================================
-st.write("")
-st.write("")
-st.subheader("Data Governance Schema")
 
-# Instead of default table, we hide index and round floats for cleaner display
-governance_df = filtered_df.sort_values(by="date", ascending=False).reset_index(drop=True)
-# Apply a slight background color to highlight the 'Gap' columns (the purpose of the table)
-def highlight_gaps(s):
-    if s.name in ['ron95_gap', 'diesel_gap']:
-        return ['background-color: rgba(245, 176, 65, 0.03)'] * len(s)
-    return [''] * len(s)
+@_fragment_decorator
+def render_calculator(latest_row: pd.Series) -> None:
+    calc_col1, calc_col2 = st.columns([1, 1.35], gap="large")
 
-styled_table = governance_df.style\
-    .format({'ron95_market': '{:.2f}', 'ron95_gap': '{:.2f}', 'diesel_market': '{:.2f}', 'diesel_gap': '{:.2f}'})\
-    .apply(highlight_gaps, axis=0)
+    with calc_col1:
+        calc_fuel = st.selectbox("Vehicle Fuel Type", ["RON95", "Diesel"])
+        is_4wd = st.checkbox("Pickup / 4WD (400 L Quota Eligibility)")
+        calc_dist = st.number_input(
+            "Daily Round-Trip Distance (km)",
+            min_value=1.0,
+            value=40.0,
+            step=5.0,
+        )
+        calc_eff = st.number_input(
+            "Vehicle Efficiency (km/L)",
+            min_value=1.0,
+            value=14.0,
+            help="Compact sedans average ~14 km/L; larger SUVs/pickups average ~10 km/L.",
+        )
+        calc_days = st.slider("Driving Days per Month", 1, 31, 22)
 
-# Display table inside an expander so it doesn't clutter the main view
-with st.expander("🔍 View Validated Raw Schema Records", expanded=False):
+    with calc_col2:
+        if calc_fuel == "RON95":
+            market_price = float(latest_row["ron95_market"])
+            subsidy_gap = float(latest_row["ron95_gap"])
+        else:
+            market_price = float(latest_row["diesel_market"])
+            subsidy_gap = float(latest_row["diesel_gap"])
+
+        stats = compute_commute_impact(
+            dist_km=calc_dist,
+            eff_kml=calc_eff,
+            days=calc_days,
+            market_price=market_price,
+            subsidy_gap=subsidy_gap,
+            is_4wd=is_4wd,
+        )
+
+        bar_pct = min(100.0, stats["utilization_pct"])
+        if stats["liters_market"] > 0:
+            bar_color = "#EF4444"
+            quota_status = f"{stats['liters_market']:.1f} L over {int(stats['quota'])} L cap"
+        elif stats["utilization_pct"] >= 85.0:
+            bar_color = "#E5A000"
+            quota_status = f"Within {int(stats['quota'])} L cap ({stats['utilization_pct']:.0f}%)"
+        else:
+            bar_color = "#10B981"
+            quota_status = f"Within {int(stats['quota'])} L cap ({stats['utilization_pct']:.0f}%)"
+
+        st.markdown(
+            f"""
+            <div class="bp-calc-panel">
+                <div class="bp-progress-header">
+                    <span>Quota Usage: {stats['monthly_liters']:.1f} L / {int(stats['quota'])} L</span>
+                    <span>{quota_status}</span>
+                </div>
+                <div class="bp-progress-track">
+                    <div class="bp-progress-fill" style="width: {bar_pct:.1f}%; background-color: {bar_color};"></div>
+                </div>
+                <div class="bp-calc-grid">
+                    <div class="bp-stat-box">
+                        <div class="bp-stat-label">Total Fuel Required</div>
+                        <div class="bp-stat-val">{stats['monthly_liters']:.1f} L</div>
+                        <div class="bp-stat-sub">{stats['monthly_km']:.0f} km / month</div>
+                    </div>
+                    <div class="bp-stat-box">
+                        <div class="bp-stat-label">Effective Monthly Cost</div>
+                        <div class="bp-stat-val">RM {stats['total_monthly_cost']:.2f}</div>
+                        <div class="bp-stat-sub">Cap rate RM {stats['subsidized_price']:.2f}/L</div>
+                    </div>
+                    <div class="bp-stat-box">
+                        <div class="bp-stat-label">Unsubsidized Exposure</div>
+                        <div class="bp-stat-val">RM {stats['cost_market']:.2f}</div>
+                        <div class="bp-stat-sub">{stats['liters_market']:.1f} L @ RM {stats['market_price']:.2f}/L</div>
+                    </div>
+                    <div class="bp-stat-box">
+                        <div class="bp-stat-label">Subsidy Absorbed</div>
+                        <div class="bp-stat-val" style="color: #10B981;">RM {stats['gov_absorbed']:.2f}</div>
+                        <div class="bp-stat-sub">{stats['liters_subsidized']:.1f} L subsidized</div>
+                    </div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
+render_calculator(latest)
+
+st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
+
+governance_df = filtered_df.sort_values(by="date", ascending=False, ignore_index=True)
+display_cols = [
+    c
+    for c in [
+        "date",
+        "ron95_market",
+        "ron95_budi",
+        "ron95_gap",
+        "diesel_market",
+        "diesel_budi",
+        "diesel_gap",
+    ]
+    if c in governance_df.columns
+]
+
+with st.expander(f"Historical price records ({len(governance_df)} weeks)", expanded=False):
+    col_cfg = {}
+    if hasattr(st, "column_config"):
+        col_cfg = {
+            "date": st.column_config.DateColumn("Week", format="YYYY-MM-DD"),
+            "ron95_market": st.column_config.NumberColumn("RON95 Float", format="RM %.2f"),
+            "ron95_budi": st.column_config.NumberColumn("RON95 Cap", format="RM %.2f"),
+            "ron95_gap": st.column_config.NumberColumn("RON95 Spread", format="RM %.2f"),
+            "diesel_market": st.column_config.NumberColumn("Diesel Float", format="RM %.2f"),
+            "diesel_budi": st.column_config.NumberColumn("Diesel Cap", format="RM %.2f"),
+            "diesel_gap": st.column_config.NumberColumn("Diesel Spread", format="RM %.2f"),
+        }
     st.dataframe(
-        styled_table, 
+        governance_df[display_cols],
         width="stretch",
-        hide_index=True
+        hide_index=True,
+        column_config=col_cfg,
     )
-    st.markdown("<span style='color: #555; font-size: 12px;'>Data Source: Calculated from validated OpenDOSM endpoints. Duplicate checking enforced via .upsert() primary key governance.</span>", unsafe_allow_html=True)

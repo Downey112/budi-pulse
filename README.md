@@ -1,66 +1,54 @@
-# BudiPulse 🇲🇾
+# BudiPulse
 
-[![Live Dashboard](https://img.shields.io/badge/Streamlit-Live_Production-FF4B4B?style=for-the-badge&logo=streamlit)](https://budi-pulse.streamlit.app)
-[![ETL Status](https://img.shields.io/badge/Pipeline-Active-2ECC71?style=for-the-badge)](https://github.com/downey112/budi-pulse/actions)
-[![Database](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?style=for-the-badge&logo=supabase)](https://supabase.com/)
+[![Live Dashboard](https://img.shields.io/badge/Streamlit-Live_Production-E5A000?style=flat-square&logo=streamlit)](https://budi-pulse.streamlit.app)
+[![ETL Status](https://img.shields.io/badge/Pipeline-Active-10B981?style=flat-square)](https://github.com/downey112/budi-pulse/actions)
+[![Database](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?style=flat-square&logo=supabase)](https://supabase.com/)
 
-An automated, end-to-end data engineering pipeline and interactive dashboard tracking Malaysia's BUDI MADANI fuel subsidy rationalization and fiscal gaps.
+End-to-end data pipeline and minimalist telemetry dashboard tracking Malaysia's BUDI MADANI fuel subsidy spreads and monthly household quota exposure.
 
 **Live Dashboard:** [budi-pulse.streamlit.app](https://budi-pulse.streamlit.app)
 
----
+## Overview
+BudiPulse tracks the weekly spread between unsubsidized market float prices and BUDI MADANI retail caps for RON95 and Diesel using official OpenDOSM datasets.
 
-## 📖 Project Overview
-BudiPulse bridges the gap between macroeconomic government datasets and personal financial impact. It automatically tracks the weekly spread between market float prices and BUDI MADANI retail caps (RON95 and Diesel), visualizing the fiscal burden absorbed by the Malaysian government. 
+Includes a **Commute Quota Calculator** (`@st.fragment` isolated) to estimate monthly fuel spend and unsubsidized market exposure against the 300 L standard quota (400 L for qualifying pickups / 4WDs).
 
-The dashboard features a **Personal Commute Burden Calculator**, allowing end-users to input their daily mileage and vehicle efficiency to dynamically calculate their monthly fuel cost exposure against the 300-liter subsidized quota (400 liters for pickups / 4WDs).
+## Stack
+* **Source:** OpenDOSM (`https://storage.data.gov.my/commodities/fuelprice.csv`)
+* **Ingestion (`src/ingest.py`):** Cached `requests.Session` with retry backoff, `BytesIO` zero-copy CSV parsing, and vectorized numeric coercion.
+* **Storage (`src/db.py`):** Supabase (PostgreSQL) with vectorized record serialization and chunked `.upsert(..., on_conflict="date")`.
+* **CI/CD (`.github/workflows/`):** Scheduled GitHub Actions (`pipeline.yml` every Sun/Wed 00:00 UTC; `keep_alive.yml` headless Playwright wake check every 6 hours).
+* **Dashboard (`src/app.py`):** Streamlit + Plotly with tabular monospace typography, subtle CSS motion (`prefers-reduced-motion` compliant), `@st.fragment` partial reruns, and native `st.column_config` grid rendering.
 
-## 🏗️ Architecture & Tech Stack
-This project utilizes a modern cloud data stack with a fully automated, zero-cost infrastructure:
+## Local Setup
 
-* **Data Source (Extraction):** OpenDOSM (Department of Statistics Malaysia) Parquet/CSV endpoints.
-* **Transformation (Python):** `pandas` and `requests`, utilizing robust HTTP sessions with automated retries and randomized user-agents to bypass government CDN/WAF blocks.
-* **Database (Storage & Governance):** Supabase (PostgreSQL). Employs primary key constraints and `.upsert()` logic to prevent duplicate records and ensure data integrity.
-* **Cloud Orchestration (CI/CD):** GitHub Actions triggers a cron job every Sunday and Wednesday at 00:00 UTC to scrape, transform, and load the latest weekly pricing data.
-* **Frontend (Visualization):** Streamlit Community Cloud & Plotly. Features custom CSS for glowing metric cards, responsive layout spacing, and a unified dark theme.
-
-### Infrastructure Health-Check
-To keep the Streamlit application from hibernating after a period without visitors, a separate GitHub Actions workflow (`keep_alive.yml`) opens the live URL in a headless browser every 6 hours and clicks the wake button if the app has gone to sleep. A plain `curl` ping is not enough, because it only receives a redirect and never starts the app.
-
----
-
-## ⚙️ Local Development Setup
-
-To run the pipeline and dashboard on your local machine:
-
-**1. Clone the repository**
 ```bash
 git clone https://github.com/downey112/budi-pulse.git
 cd budi-pulse
-```
-
-**2. Set up the virtual environment & install dependencies**
-```bash
 python -m venv venv
-source venv/Scripts/activate  # On Windows Git Bash
+source venv/Scripts/activate
 pip install -r requirements.txt
 ```
 
-**3. Configure Environment Variables**
-Create a `.env` file in the root directory and add your Supabase credentials:
-```toml
+Create `.env` in the repo root:
+```env
 SUPABASE_URL="your_supabase_project_url"
-SUPABASE_SERVICE_ROLE_KEY="your_supabase_master_key"
+SUPABASE_SERVICE_ROLE_KEY="your_supabase_service_role_key"
 SUPABASE_ANON_KEY="your_supabase_anon_key"
 ```
-The ETL pipeline writes with the service role key. The dashboard only reads, so it uses `SUPABASE_ANON_KEY` when set (this needs a read policy on `fuel_subsidy_records`) and falls back to the service role key otherwise.
 
-**4. Run the ETL Pipeline manually**
+## Commands
+
 ```bash
+# Preview ingestion (read-only)
+python src/ingest.py
+
+# Run ETL upsert to Supabase
 python src/db.py
-```
 
-**5. Launch the Streamlit Dashboard**
-```bash
+# Run unit & integration test suite
+python -m unittest discover -s tests -v
+
+# Start dashboard
 python -m streamlit run src/app.py
 ```
