@@ -52,3 +52,7 @@ python -m unittest discover -s tests -v
 # Start dashboard
 python -m streamlit run src/app.py
 ```
+
+## License
+
+Released under the [MIT License](LICENSE).
