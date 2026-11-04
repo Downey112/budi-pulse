@@ -8,7 +8,7 @@ on:
 jobs:
   ping-app:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v7
